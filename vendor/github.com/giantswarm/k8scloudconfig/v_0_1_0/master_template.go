@@ -10,6 +10,271 @@ users:
        - "{{ $user.PublicKey }}"
 {{end}}
 write_files:
+{{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
+- path: /srv/calico-azure.yaml
+  owner: root
+  permissions: 644
+  content: |
+    # Calico Version v2.6.3
+    # https://docs.projectcalico.org/v2.6/releases#v2.6.3
+    # This manifest includes the following component versions:
+    #   calico/node:v2.6.3
+    #   calico/cni:v1.11.1
+
+    # This ConfigMap is used to configure a self-hosted Calico installation.
+    kind: ConfigMap
+    apiVersion: v1
+    metadata:
+      name: calico-config
+      namespace: kube-system
+    data:
+      # The CNI network configuration to install on each node.
+      cni_network_config: |-
+        {
+            "name": "k8s-pod-network",
+            "cniVersion": "0.1.0",
+            "type": "calico",
+            "log_level": "info",
+            "datastore_type": "kubernetes",
+            "nodename": "__KUBERNETES_NODE_NAME__",
+            "mtu": 1500,
+            "ipam": {
+                "type": "host-local",
+                "subnet": "usePodCidr"
+            },
+            "policy": {
+                "type": "k8s",
+                "k8s_auth_token": "__SERVICEACCOUNT_TOKEN__"
+            },
+            "kubernetes": {
+                "k8s_api_root": "https://__KUBERNETES_SERVICE_HOST__:__KUBERNETES_SERVICE_PORT__",
+                "kubeconfig": "__KUBECONFIG_FILEPATH__"
+            }
+        }
+
+    ---
+
+    # This manifest installs the calico/node container, as well
+    # as the Calico CNI plugins and network config on
+    # each master and worker node in a Kubernetes cluster.
+    kind: DaemonSet
+    apiVersion: extensions/v1beta1
+    metadata:
+      name: calico-node
+      namespace: kube-system
+      labels:
+        k8s-app: calico-node
+    spec:
+      selector:
+        matchLabels:
+          k8s-app: calico-node
+      template:
+        metadata:
+          labels:
+            k8s-app: calico-node
+          annotations:
+            # This, along with the CriticalAddonsOnly toleration below,
+            # marks the pod as a critical add-on, ensuring it gets
+            # priority scheduling and that its resources are reserved
+            # if it ever gets evicted.
+            scheduler.alpha.kubernetes.io/critical-pod: ''
+        spec:
+          hostNetwork: true
+          serviceAccountName: calico-node
+          tolerations:
+            # Allow the pod to run on the master.  This is required for
+            # the master to communicate with pods.
+            - key: node-role.kubernetes.io/master
+              effect: NoSchedule
+            # Mark the pod as a critical add-on for rescheduling.
+            - key: "CriticalAddonsOnly"
+              operator: "Exists"
+          # Minimize downtime during a rolling upgrade or deletion; tell Kubernetes to do a "force
+          # deletion": https://kubernetes.io/docs/concepts/workloads/pods/pod/#termination-of-pods.
+          terminationGracePeriodSeconds: 0
+          containers:
+            # Runs calico/node container on each Kubernetes node.  This
+            # container programs network policy and routes on each
+            # host.
+            - name: calico-node
+              image: quay.io/calico/node:v2.6.3
+              env:
+                # Use Kubernetes API as the backing datastore.
+                - name: DATASTORE_TYPE
+                  value: "kubernetes"
+                # Enable felix info logging.
+                - name: FELIX_LOGSEVERITYSCREEN
+                  value: "info"
+                # Don't enable BGP.
+                - name: CALICO_NETWORKING_BACKEND
+                  value: "none"
+                # Cluster type to identify the deployment type
+                - name: CLUSTER_TYPE
+                  value: "k8s"
+                # Disable file logging so kubectl logs works.
+                - name: CALICO_DISABLE_FILE_LOGGING
+                  value: "true"
+                # Set Felix endpoint to host default action to ACCEPT.
+                - name: FELIX_DEFAULTENDPOINTTOHOSTACTION
+                  value: "ACCEPT"
+                # Disable IPV6 on Kubernetes.
+                - name: FELIX_IPV6SUPPORT
+                  value: "false"
+                # Wait for the datastore.
+                - name: WAIT_FOR_DATASTORE
+                  value: "true"
+                # The Calico IPv4 pool to use.  This should match --cluster-cidr
+                - name: CALICO_IPV4POOL_CIDR
+                  value: "{{.Cluster.Calico.Subnet}}/{{.Cluster.Calico.CIDR}}"
+                # Enable IPIP
+                - name: CALICO_IPV4POOL_IPIP
+                  value: "always"
+                # Set based on the k8s node name.
+                - name: NODENAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
+                # No IP address needed.
+                - name: IP
+                  value: ""
+                - name: FELIX_HEALTHENABLED
+                  value: "true"
+              securityContext:
+                privileged: true
+              resources:
+                requests:
+                  cpu: 250m
+              livenessProbe:
+                httpGet:
+                  path: /liveness
+                  port: 9099
+                periodSeconds: 10
+                initialDelaySeconds: 10
+                failureThreshold: 6
+              readinessProbe:
+                httpGet:
+                  path: /readiness
+                  port: 9099
+                periodSeconds: 10
+              volumeMounts:
+                - mountPath: /lib/modules
+                  name: lib-modules
+                  readOnly: true
+                - mountPath: /var/run/calico
+                  name: var-run-calico
+                  readOnly: false
+            # This container installs the Calico CNI binaries
+            # and CNI network config file on each node.
+            - name: install-cni
+              image: quay.io/calico/cni:v1.11.1
+              command: ["/install-cni.sh"]
+              env:
+                # The CNI network config to install on each node.
+                - name: CNI_NETWORK_CONFIG
+                  valueFrom:
+                    configMapKeyRef:
+                      name: calico-config
+                      key: cni_network_config
+                # Set the hostname based on the k8s node name.
+                - name: KUBERNETES_NODE_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
+              volumeMounts:
+                - mountPath: /host/opt/cni/bin
+                  name: cni-bin-dir
+                - mountPath: /host/etc/cni/net.d
+                  name: cni-net-dir
+          volumes:
+            # Used by calico/node.
+            - name: lib-modules
+              hostPath:
+                path: /lib/modules
+            - name: var-run-calico
+              hostPath:
+                path: /var/run/calico
+            # Used to install CNI.
+            - name: cni-bin-dir
+              hostPath:
+                path: /opt/cni/bin
+            - name: cni-net-dir
+              hostPath:
+                path: /etc/cni/net.d
+
+    # Create all the CustomResourceDefinitions needed for
+    # Calico policy-only mode.
+    ---
+
+    apiVersion: apiextensions.k8s.io/v1beta1
+    description: Calico Global Felix Configuration
+    kind: CustomResourceDefinition
+    metadata:
+       name: globalfelixconfigs.crd.projectcalico.org
+    spec:
+      scope: Cluster
+      group: crd.projectcalico.org
+      version: v1
+      names:
+        kind: GlobalFelixConfig
+        plural: globalfelixconfigs
+        singular: globalfelixconfig
+
+    ---
+
+    apiVersion: apiextensions.k8s.io/v1beta1
+    description: Calico Global BGP Configuration
+    kind: CustomResourceDefinition
+    metadata:
+      name: globalbgpconfigs.crd.projectcalico.org
+    spec:
+      scope: Cluster
+      group: crd.projectcalico.org
+      version: v1
+      names:
+        kind: GlobalBGPConfig
+        plural: globalbgpconfigs
+        singular: globalbgpconfig
+
+    ---
+
+    apiVersion: apiextensions.k8s.io/v1beta1
+    description: Calico IP Pools
+    kind: CustomResourceDefinition
+    metadata:
+      name: ippools.crd.projectcalico.org
+    spec:
+      scope: Cluster
+      group: crd.projectcalico.org
+      version: v1
+      names:
+        kind: IPPool
+        plural: ippools
+        singular: ippool
+
+    ---
+
+    apiVersion: apiextensions.k8s.io/v1beta1
+    description: Calico Global Network Policies
+    kind: CustomResourceDefinition
+    metadata:
+      name: globalnetworkpolicies.crd.projectcalico.org
+    spec:
+      scope: Cluster
+      group: crd.projectcalico.org
+      version: v1
+      names:
+        kind: GlobalNetworkPolicy
+        plural: globalnetworkpolicies
+        singular: globalnetworkpolicy
+
+    ---
+
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: calico-node
+      namespace: kube-system
+{{ end -}}
 - path: /srv/calico-ipip-pinger-sa.yaml
   owner: root
   permissions: 644
@@ -978,7 +1243,7 @@ write_files:
           serviceAccountName: kube-proxy
           containers:
             - name: kube-proxy
-              image: quay.io/giantswarm/hyperkube:v1.8.1_coreos.0
+              image: "gcr.io/google-containers/hyperkube:v1.9.0-beta.0"
               command:
               - /hyperkube
               - proxy
@@ -1514,6 +1779,9 @@ write_files:
        calico-ipip-pinger-sa.yaml\
        calico-ipip-pinger.yaml"
 
+      # For Azure apply calico in policy-only mode and skip other calico manifests.
+      [ -f "/srv/calico-azure.yaml" ] && CALICO_FILES="calico-azure.yaml"
+
       for manifest in $CALICO_FILES
       do
           while
@@ -1590,7 +1858,7 @@ write_files:
     - name: local
       cluster:
         certificate-authority: /etc/kubernetes/ssl/apiserver-ca.pem
-        server: https://{{.Cluster.Kubernetes.API.Domain}}
+        server: https://127.0.0.1
     contexts:
     - context:
         cluster: local
@@ -1613,7 +1881,7 @@ write_files:
     - name: local
       cluster:
         certificate-authority: /etc/kubernetes/ssl/apiserver-ca.pem
-        server: https://{{.Cluster.Kubernetes.API.Domain}}
+        server: https://127.0.0.1
     contexts:
     - context:
         cluster: local
@@ -1635,7 +1903,7 @@ write_files:
     - name: local
       cluster:
         certificate-authority: /etc/kubernetes/ssl/apiserver-ca.pem
-        server: https://{{.Cluster.Kubernetes.API.Domain}}
+        server: https://127.0.0.1
     contexts:
     - context:
         cluster: local
@@ -1657,7 +1925,7 @@ write_files:
     - name: local
       cluster:
         certificate-authority: /etc/kubernetes/ssl/apiserver-ca.pem
-        server: https://{{.Cluster.Kubernetes.API.Domain}}
+        server: https://127.0.0.1
     contexts:
     - context:
         cluster: local
@@ -1679,7 +1947,7 @@ write_files:
     - name: local
       cluster:
         certificate-authority: /etc/kubernetes/ssl/apiserver-ca.pem
-        server: https://{{.Cluster.Kubernetes.API.Domain}}
+        server: https://127.0.0.1
     contexts:
     - context:
         cluster: local
@@ -1945,7 +2213,7 @@ coreos:
       RestartSec=0
       TimeoutStopSec=10
       EnvironmentFile=/etc/network-environment
-      Environment="IMAGE=quay.io/giantswarm/hyperkube:v1.8.1_coreos.0"
+      Environment="IMAGE=gcr.io/google-containers/hyperkube:v1.9.0-beta.0"
       Environment="NAME=%p.service"
       Environment="NETWORK_CONFIG_CONTAINER="
       ExecStartPre=/usr/bin/docker pull $IMAGE
@@ -1974,6 +2242,9 @@ coreos:
       -v /usr/sbin/mkfs.xfs:/usr/sbin/mkfs.xfs \
       -v /usr/lib64/libxfs.so.0:/usr/lib/libxfs.so.0 \
       -v /usr/lib64/libxcmd.so.0:/usr/lib/libxcmd.so.0 \
+      {{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
+      -v /var/lib/waagent/ManagedIdentity-Settings:/var/lib/waagent/ManagedIdentity-Settings:ro \
+      {{ end -}}
       -e ETCD_CA_CERT_FILE=/etc/kubernetes/ssl/etcd/server-ca.pem \
       -e ETCD_CERT_FILE=/etc/kubernetes/ssl/etcd/server-crt.pem \
       -e ETCD_KEY_FILE=/etc/kubernetes/ssl/etcd/server-key.pem \
@@ -1989,6 +2260,9 @@ coreos:
       --machine-id-file=/rootfs/etc/machine-id \
       --cadvisor-port=4194 \
       --cloud-provider={{.Cluster.Kubernetes.CloudProvider}} \
+      {{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
+      --cloud-config=/etc/kubernetes/config/azure.yaml \
+      {{ end -}}
       --healthz-bind-address=${DEFAULT_IPV4} \
       --healthz-port=10248 \
       --cluster-dns={{.Cluster.Kubernetes.DNS.IP}} \
@@ -2040,7 +2314,7 @@ coreos:
       RestartSec=0
       TimeoutStopSec=10
       EnvironmentFile=/etc/network-environment
-      Environment="IMAGE=quay.io/giantswarm/hyperkube:v1.8.1_coreos.0"
+      Environment="IMAGE=gcr.io/google-containers/hyperkube:v1.9.0-beta.0"
       Environment="NAME=%p.service"
       Environment="NETWORK_CONFIG_CONTAINER="
       ExecStartPre=/usr/bin/mkdir -p /etc/kubernetes/manifests
@@ -2051,6 +2325,10 @@ coreos:
       -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ \
       -v /etc/kubernetes/secrets/token_sign_key.pem:/etc/kubernetes/secrets/token_sign_key.pem \
       -v /etc/kubernetes/encryption/:/etc/kubernetes/encryption \
+      {{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
+      -v /etc/kubernetes/config:/etc/kubernetes/config \
+      -v /var/lib/waagent/ManagedIdentity-Settings:/var/lib/waagent/ManagedIdentity-Settings:ro \
+      {{ end -}}
       $IMAGE \
       /hyperkube apiserver \
       --allow_privileged=true \
@@ -2060,7 +2338,7 @@ coreos:
       --kubelet_https=true \
       --kubelet-preferred-address-types=InternalIP \
       --secure_port={{.Cluster.Kubernetes.API.SecurePort}} \
-      --bind-address=${DEFAULT_IPV4} \
+      --bind-address=0.0.0.0 \
       --etcd-prefix={{.Cluster.Etcd.Prefix}} \
       --profiling=false \
       --repair-malformed-updates=false \
@@ -2068,6 +2346,9 @@ coreos:
       --authorization-mode=RBAC \
       --admission-control=NamespaceLifecycle,LimitRanger,ServiceAccount,ResourceQuota,DefaultStorageClass,PodSecurityPolicy \
       --cloud-provider={{.Cluster.Kubernetes.CloudProvider}} \
+      {{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
+      --cloud-config=/etc/kubernetes/config/azure.yaml \
+      {{ end -}}
       --service-cluster-ip-range={{.Cluster.Kubernetes.API.ClusterIPRange}} \
       --etcd-servers=https://127.0.0.1:2379 \
       --etcd-cafile=/etc/kubernetes/ssl/etcd/server-ca.pem \
@@ -2084,7 +2365,9 @@ coreos:
       --audit-log-maxage=30 \
       --audit-log-maxbackup=10 \
       --audit-log-maxsize=100 \
+      {{- if ne .Cluster.Kubernetes.CloudProvider "azure" }}
       --experimental-encryption-provider-config=/etc/kubernetes/encryption/k8s-encryption-config.yaml
+      {{ end -}}
       ExecStop=-/usr/bin/docker stop -t 10 $NAME
       ExecStopPost=-/usr/bin/docker rm -f $NAME
   - name: k8s-controller-manager.service
@@ -2100,7 +2383,7 @@ coreos:
       RestartSec=0
       TimeoutStopSec=10
       EnvironmentFile=/etc/network-environment
-      Environment="IMAGE=quay.io/giantswarm/hyperkube:v1.8.1_coreos.0"
+      Environment="IMAGE=gcr.io/google-containers/hyperkube:v1.9.0-beta.0"
       Environment="NAME=%p.service"
       Environment="NETWORK_CONFIG_CONTAINER="
       ExecStartPre=/usr/bin/docker pull $IMAGE
@@ -2110,11 +2393,19 @@ coreos:
       -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ \
       -v /etc/kubernetes/config/:/etc/kubernetes/config/ \
       -v /etc/kubernetes/secrets/token_sign_key.pem:/etc/kubernetes/secrets/token_sign_key.pem \
+      {{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
+      -v /var/lib/waagent/ManagedIdentity-Settings:/var/lib/waagent/ManagedIdentity-Settings:ro \
+      {{ end -}}
       $IMAGE \
       /hyperkube controller-manager \
       --logtostderr=true \
       --v=2 \
       --cloud-provider={{.Cluster.Kubernetes.CloudProvider}} \
+      {{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
+      --cloud-config=/etc/kubernetes/config/azure.yaml \
+      --allocate-node-cidrs=true \
+      --cluster-cidr {{.Cluster.Calico.Subnet}}/{{.Cluster.Calico.CIDR}} \
+      {{ end -}}
       --profiling=false \
       --terminated-pod-gc-threshold=10 \
       --use-service-account-credentials=true \
@@ -2136,7 +2427,7 @@ coreos:
       RestartSec=0
       TimeoutStopSec=10
       EnvironmentFile=/etc/network-environment
-      Environment="IMAGE=quay.io/giantswarm/hyperkube:v1.8.1_coreos.0"
+      Environment="IMAGE=gcr.io/google-containers/hyperkube:v1.9.0-beta.0"
       Environment="NAME=%p.service"
       Environment="NETWORK_CONFIG_CONTAINER="
       ExecStartPre=/usr/bin/docker pull $IMAGE
