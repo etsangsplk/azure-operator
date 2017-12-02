@@ -10,11 +10,83 @@ users:
        - "{{ $user.PublicKey }}"
 {{end}}
 write_files:
-{{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
+{{ if eq .Cluster.Kubernetes.CloudProvider "azure" }}
 - path: /srv/calico-azure.yaml
   owner: root
   permissions: 644
   content: |
+    # Calico Version v2.6.3
+    # https://docs.projectcalico.org/v2.6/releases#v2.6.3
+    kind: ClusterRole
+    apiVersion: rbac.authorization.k8s.io/v1beta1
+    metadata:
+      name: calico-node
+    rules:
+      - apiGroups: [""]
+        resources:
+          - namespaces
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: [""]
+        resources:
+          - pods/status
+        verbs:
+          - update
+      - apiGroups: [""]
+        resources:
+          - pods
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: [""]
+        resources:
+          - nodes
+        verbs:
+          - get
+          - list
+          - update
+          - watch
+      - apiGroups: ["extensions"]
+        resources:
+          - networkpolicies
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: ["crd.projectcalico.org"]
+        resources:
+          - globalfelixconfigs
+          - bgppeers
+          - globalbgpconfigs
+          - ippools
+          - globalnetworkpolicies
+        verbs:
+          - create
+          - get
+          - list
+          - update
+          - watch
+
+    ---
+
+    apiVersion: rbac.authorization.k8s.io/v1beta1
+    kind: ClusterRoleBinding
+    metadata:
+      name: calico-node
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: calico-node
+    subjects:
+    - kind: ServiceAccount
+      name: calico-node
+      namespace: kube-system
+
+    ---
+
     # Calico Version v2.6.3
     # https://docs.projectcalico.org/v2.6/releases#v2.6.3
     # This manifest includes the following component versions:
@@ -274,7 +346,45 @@ write_files:
     metadata:
       name: calico-node
       namespace: kube-system
-{{ end -}}
+
+- path: /srv/default-storage-class.yaml
+  owner: root
+  permissions: 644
+  content: |
+    apiVersion: storage.k8s.io/v1beta1
+    kind: StorageClass
+    metadata:
+      name: default
+      annotations:
+        storageclass.beta.kubernetes.io/is-default-class: "true"
+      labels:
+        kubernetes.io/cluster-service: "true"
+    provisioner: kubernetes.io/azure-disk
+    ---
+    apiVersion: storage.k8s.io/v1beta1
+    kind: StorageClass
+    metadata:
+      name: managed-premium
+      annotations:
+      labels:
+        kubernetes.io/cluster-service: "true"
+    provisioner: kubernetes.io/azure-disk
+    parameters:
+      kind: Managed
+      storageaccounttype: Premium_LRS
+    ---
+    apiVersion: storage.k8s.io/v1beta1
+    kind: StorageClass
+    metadata:
+      name: managed-standard
+      annotations:
+      labels:
+        kubernetes.io/cluster-service: "true"
+    provisioner: kubernetes.io/azure-disk
+    parameters:
+      kind: Managed
+      storageaccounttype: Standard_LRS
+{{ end }}
 - path: /srv/calico-ipip-pinger-sa.yaml
   owner: root
   permissions: 644
@@ -1768,6 +1878,7 @@ write_files:
           done
       done
 
+{{ if ne .Cluster.Kubernetes.CloudProvider "azure" }}
       # apply calico CNI
       CALICO_FILES="calico-configmap.yaml\
        calico-node-sa.yaml\
@@ -1778,9 +1889,6 @@ write_files:
        calico-node-controller.yaml\
        calico-ipip-pinger-sa.yaml\
        calico-ipip-pinger.yaml"
-
-      # For Azure apply calico in policy-only mode and skip other calico manifests.
-      [ -f "/srv/calico-azure.yaml" ] && CALICO_FILES="calico-azure.yaml"
 
       for manifest in $CALICO_FILES
       do
@@ -1805,6 +1913,7 @@ write_files:
           echo "Waiting for calico to be ready . . "
           sleep 3s
       done
+{{ end }}
 
       # apply default storage class
       if [ -f /srv/default-storage-class.yaml ]; then
@@ -1831,6 +1940,10 @@ write_files:
                  ingress-controller-cm.yml\
                  ingress-controller-dep.yml\
                  ingress-controller-svc.yml"
+
+{{ if eq .Cluster.Kubernetes.CloudProvider "azure" }}
+      MANIFESTS="calico-azure.yaml ${MANIFESTS}"
+{{ end }}
 
       for manifest in $MANIFESTS
       do
@@ -2243,8 +2356,7 @@ coreos:
       -v /usr/lib64/libxfs.so.0:/usr/lib/libxfs.so.0 \
       -v /usr/lib64/libxcmd.so.0:/usr/lib/libxcmd.so.0 \
       {{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
-      -v /var/lib/waagent/ManagedIdentity-Settings:/var/lib/waagent/ManagedIdentity-Settings:ro \
-      {{ end -}}
+      -v /var/lib/waagent/ManagedIdentity-Settings:/var/lib/waagent/ManagedIdentity-Settings:ro \{{ end }}
       -e ETCD_CA_CERT_FILE=/etc/kubernetes/ssl/etcd/server-ca.pem \
       -e ETCD_CERT_FILE=/etc/kubernetes/ssl/etcd/server-crt.pem \
       -e ETCD_KEY_FILE=/etc/kubernetes/ssl/etcd/server-key.pem \
@@ -2261,8 +2373,7 @@ coreos:
       --cadvisor-port=4194 \
       --cloud-provider={{.Cluster.Kubernetes.CloudProvider}} \
       {{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
-      --cloud-config=/etc/kubernetes/config/azure.yaml \
-      {{ end -}}
+      --cloud-config=/etc/kubernetes/config/azure.yaml \{{ end }}
       --healthz-bind-address=${DEFAULT_IPV4} \
       --healthz-port=10248 \
       --cluster-dns={{.Cluster.Kubernetes.DNS.IP}} \
@@ -2327,8 +2438,7 @@ coreos:
       -v /etc/kubernetes/encryption/:/etc/kubernetes/encryption \
       {{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
       -v /etc/kubernetes/config:/etc/kubernetes/config \
-      -v /var/lib/waagent/ManagedIdentity-Settings:/var/lib/waagent/ManagedIdentity-Settings:ro \
-      {{ end -}}
+      -v /var/lib/waagent/ManagedIdentity-Settings:/var/lib/waagent/ManagedIdentity-Settings:ro \{{ end }}
       $IMAGE \
       /hyperkube apiserver \
       --allow_privileged=true \
@@ -2347,8 +2457,7 @@ coreos:
       --admission-control=NamespaceLifecycle,LimitRanger,ServiceAccount,ResourceQuota,DefaultStorageClass,PodSecurityPolicy \
       --cloud-provider={{.Cluster.Kubernetes.CloudProvider}} \
       {{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
-      --cloud-config=/etc/kubernetes/config/azure.yaml \
-      {{ end -}}
+      --cloud-config=/etc/kubernetes/config/azure.yaml \{{ end }}
       --service-cluster-ip-range={{.Cluster.Kubernetes.API.ClusterIPRange}} \
       --etcd-servers=https://127.0.0.1:2379 \
       --etcd-cafile=/etc/kubernetes/ssl/etcd/server-ca.pem \
@@ -2361,13 +2470,12 @@ coreos:
       --tls-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem \
       --client-ca-file=/etc/kubernetes/ssl/apiserver-ca.pem \
       --service-account-key-file=/etc/kubernetes/ssl/service-account-key.pem \
+      {{- if ne .Cluster.Kubernetes.CloudProvider "azure" }}
+      --experimental-encryption-provider-config=/etc/kubernetes/encryption/k8s-encryption-config.yaml \{{ end }}
       --audit-log-path=/var/log/apiserver/audit.log \
       --audit-log-maxage=30 \
       --audit-log-maxbackup=10 \
-      --audit-log-maxsize=100 \
-      {{- if ne .Cluster.Kubernetes.CloudProvider "azure" }}
-      --experimental-encryption-provider-config=/etc/kubernetes/encryption/k8s-encryption-config.yaml
-      {{ end -}}
+      --audit-log-maxsize=100
       ExecStop=-/usr/bin/docker stop -t 10 $NAME
       ExecStopPost=-/usr/bin/docker rm -f $NAME
   - name: k8s-controller-manager.service
@@ -2394,8 +2502,7 @@ coreos:
       -v /etc/kubernetes/config/:/etc/kubernetes/config/ \
       -v /etc/kubernetes/secrets/token_sign_key.pem:/etc/kubernetes/secrets/token_sign_key.pem \
       {{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
-      -v /var/lib/waagent/ManagedIdentity-Settings:/var/lib/waagent/ManagedIdentity-Settings:ro \
-      {{ end -}}
+      -v /var/lib/waagent/ManagedIdentity-Settings:/var/lib/waagent/ManagedIdentity-Settings:ro \{{ end }}
       $IMAGE \
       /hyperkube controller-manager \
       --logtostderr=true \
@@ -2404,8 +2511,7 @@ coreos:
       {{- if eq .Cluster.Kubernetes.CloudProvider "azure" }}
       --cloud-config=/etc/kubernetes/config/azure.yaml \
       --allocate-node-cidrs=true \
-      --cluster-cidr {{.Cluster.Calico.Subnet}}/{{.Cluster.Calico.CIDR}} \
-      {{ end -}}
+      --cluster-cidr {{.Cluster.Calico.Subnet}}/{{.Cluster.Calico.CIDR}} \{{ end }}
       --profiling=false \
       --terminated-pod-gc-threshold=10 \
       --use-service-account-credentials=true \
