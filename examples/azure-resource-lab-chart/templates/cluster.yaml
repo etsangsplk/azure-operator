@@ -83,6 +83,14 @@ spec:
         offer: "CoreOS"
         sku: "Stable"
         version: "{{.Values.azure.coreOSVersion}}"
+    - vmSize: "{{.Values.azure.vmSizeMaster}}"
+      adminUsername: "core"
+      adminSSHKeyData: "{{.Values.sshPublicKey}}"
+      osImage:
+        publisher: "CoreOS"
+        offer: "CoreOS"
+        sku: "Stable"
+        version: "{{.Values.azure.coreOSVersion}}"
     workers:
     - vmSize: "{{.Values.azure.vmSizeWorker}}"
       adminUsername: "core"
