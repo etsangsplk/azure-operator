@@ -2226,7 +2226,6 @@ coreos:
       Conflicts=etcd.service etcd2.service
 
       [Service]
-      StartLimitIntervalSec=0
       Restart=always
       RestartSec=0
       TimeoutStopSec=10
