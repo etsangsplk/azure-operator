@@ -24,6 +24,8 @@ const (
 	// loopbackAddr is used to set various cloud config template
 	// parameters to work around Azure load balancers limitation.
 	loopbackAddr = "127.0.0.1"
+
+	defaultK8sccVersion = "v3.0.0"
 )
 
 // Config represents the configuration used to create a cloudconfig service.
@@ -135,7 +137,15 @@ func (c CloudConfig) NewMasterCloudConfig(customObject providerv1alpha1.AzureCon
 		MasterAPIDomain: loopbackAddr,
 	}
 
-	return newCloudConfig(k8scloudconfig.MasterTemplate, params)
+	// TODO: Extract k8scc version from versionbundle.
+	version := defaultK8sccVersion
+
+	masterTemplate, err := k8scloudconfig.GetMasterTemplate(version)
+	if err != nil {
+		return "", microerror.Maskf(invalidConfigError, "config.AzureConfig.%s", err)
+	}
+
+	return newCloudConfig(masterTemplate, params)
 }
 
 // NewWorkerCloudConfig generates a new worker cloudconfig and returns it as a
