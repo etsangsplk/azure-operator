@@ -1,473 +1,447 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
-  "contentVersion": "1.0.0.0",
-  "parameters": {
-    "clusterID": {
-      "type": "string",
-      "metadata": {
-        "description": "Unique ID of this guest cluster."
-      }
-    },
-    "GiantSwarmTags": {
-      "type": "object",
-      "defaultValue": {
-        "provider": "F80D01C0-7AAC-4440-98F6-5061511962AD"
-      }
-    },
-    "virtualNetworkCidr": {
-      "type": "string",
-      "metadata": {
-        "description": "The main CIDR block reserved for this virtual network."
-      }
-    },
-    "calicoSubnetCidr": {
-      "type": "string"
-    },
-    "masterSubnetCidr": {
-      "type": "string"
-    },
-    "workerSubnetCidr": {
-      "type": "string"
-    },
-    "hostClusterCidr": {
-      "type": "string"
-    },
-    "kubernetesAPISecurePort": {
-      "type": "int"
-    },
-    "kubernetesIngressSecurePort": {
-      "type": "int"
-    },
-    "kubernetesIngressInsecurePort": {
-      "type": "int"
-    },
-    "masterNodes": {
-      "type": "array"
-    },
-    "workerNodes": {
-      "type": "array"
-    },
-    "masterDisablePasswordAuth": {
-      "type": "bool",
-      "defaultValue": true
-    },
-    "workerDisablePasswordAuth": {
-      "type": "bool",
-      "defaultValue": true
-    },
-    "masterCloudConfigData": {
-      "type": "string",
-      "metadata": {
-        "description": "Base64-encoded cloud-config data."
-      }
-    },
-    "workerCloudConfigData": {
-      "type": "string",
-      "metadata": {
-        "description": "Base64-encoded cloud-config data."
-      }
-    },
-    "keyVaultName": {
-      "type": "string"
-    },
-    "keyVaultSecretsObject": {
-      "type": "secureObject"
-    },
-    "templatesBaseURI" : {
-      "type": "string",
-      "metadata": {
-        "description": "The base URI from which the templates will be fetched. Ends with a trailing '/'."
-      }
-    },
-    "availabilitySetsTemplateFile": {
-      "type": "string",
-      "defaultValue": "availability_sets_setup.json"
-    },
-    "certificatesTemplateFile": {
-      "type": "string",
-      "defaultValue": "certificates.json"
-    },
-    "dnsASetupTemplateFile": {
-      "type": "string",
-      "defaultValue": "dns_a_setup.json"
-    },
-    "dnsCNAMESetupTemplateFile": {
-      "type": "string",
-      "defaultValue": "dns_cname_setup.json"
-    },
-    "nodeSetupTemplateFile": {
-      "type": "string",
-      "defaultValue": "node_setup.json"
-    },
-    "publicLoadBalancerTemplateFile": {
-      "type": "string",
-      "defaultValue": "public_load_balancer_setup.json"
-    },
-    "routeTableTemplateFile": {
-      "type": "string",
-      "defaultValue": "route_table_setup.json"
-    },
-    "securityGroupsSetupTemplateFile": {
-      "type": "string",
-      "defaultValue": "security_groups_setup.json"
-    },
-    "virtualNetworkSetupTemplateFile": {
-      "type": "string",
-      "defaultValue": "virtual_network_setup.json"
-    },
-    "dnsZones": {
-      "type": "object",
-      "metadata": {
-        "description": "The DNS zones for kubernetes api, etcd and ingress."
-      }
-    }
-  },
-  "variables": {
-    "availabilitySetsTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('availabilitySetsTemplateFile'))]",
-    "certificatesTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('certificatesTemplateFile'))]",
-    "dnsASetupTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('dnsASetupTemplateFile'))]",
-    "dnsCNAMESetupTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('dnsCNAMESetupTemplateFile'))]",
-    "nodeSetupTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('nodeSetupTemplateFile'))]",
-    "publicLoadBalancerTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('publicLoadBalancerTemplateFile'))]",
-    "routeTableTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('routeTableTemplateFile'))]",
-    "securityGroupsSetupTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('securityGroupsSetupTemplateFile'))]",
-    "virtualNetworkSetupTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('virtualNetworkSetupTemplateFile'))]",
-    "masterPrefix": "Master",
-    "workerPrefix": "Worker"
-  },
-  "resources": [
-    {
-      "apiVersion": "2016-09-01",
-      "name": "security_groups_setup",
-      "type": "Microsoft.Resources/deployments",
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('securityGroupsSetupTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "certData": {
+            "type": "secureString"
         },
-        "parameters": {
-          "clusterID": {"value": "[parameters('clusterID')]"},
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "virtualNetworkCidr": {"value": "[parameters('virtualNetworkCidr')]"},
-          "calicoSubnetCidr": {"value": "[parameters('calicoSubnetCidr')]"},
-          "masterSubnetCidr": {"value": "[parameters('masterSubnetCidr')]"},
-          "workerSubnetCidr": {"value": "[parameters('workerSubnetCidr')]"},
-          "hostClusterCidr": {"value": "[parameters('hostClusterCidr')]"},
-          "kubernetesAPISecurePort": {"value": "[parameters('kubernetesAPISecurePort')]"},
-          "kubernetesIngressSecurePort": {"value": "[parameters('kubernetesIngressSecurePort')]"},
-          "kubernetesIngressInsecurePort": {"value": "[parameters('kubernetesIngressInsecurePort')]"}
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "route_table_setup",
-      "type": "Microsoft.Resources/deployments",
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('routeTableTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "clusterID": {
+            "type": "string",
+            "metadata": {
+                "description": "Unique ID of this guest cluster."
+            }
         },
-        "parameters": {
-          "clusterID": {"value": "[parameters('clusterID')]"},
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"}
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "virtual_network_setup",
-      "type": "Microsoft.Resources/deployments",
-      "dependsOn": [
-          "route_table_setup"
-      ],
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('virtualNetworkSetupTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "GiantSwarmTags": {
+            "type": "object",
+            "defaultValue": {
+                "provider": "F80D01C0-7AAC-4440-98F6-5061511962AD"
+            }
         },
-        "parameters": {
-          "clusterID": {"value": "[parameters('clusterID')]"},
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "virtualNetworkCidr": {"value": "[parameters('virtualNetworkCidr')]"},
-          "masterSubnetCidr": {"value": "[parameters('masterSubnetCidr')]"},
-          "workerSubnetCidr": {"value": "[parameters('workerSubnetCidr')]"},
-          "masterSecurityGroupID": {"value": "[reference('security_groups_setup').outputs.masterSecurityGroupID.value]"},
-          "workerSecurityGroupID": {"value": "[reference('security_groups_setup').outputs.workerSecurityGroupID.value]"},
-          "routeTableID": {"value": "[reference('route_table_setup').outputs.id.value]"}
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "certificates",
-      "type": "Microsoft.Resources/deployments",
-      "dependsOn": [
-        "master_nodes_setup_copy",
-        "worker_nodes_setup_copy"
-      ],
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('certificatesTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "virtualNetworkCidr": {
+            "type": "string",
+            "metadata": {
+                "description": "The main CIDR block reserved for this virtual network."
+            }
         },
-        "parameters": {
-          "clusterID": {"value": "[parameters('clusterID')]"},
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "keyVaultName": {"value": "[parameters('keyVaultName')]"},
-          "keyVaultSecretsObject": {"value": "[parameters('keyVaultSecretsObject')]"},
-          "masterNodeIDs": {
-            "copy": [{
-              "name": "value",
-              "count": "[length(parameters('masterNodes'))]",
-              "input": {
-                "id": "[reference(concat('master_nodes_setup_', string(add(copyIndex('value'), 1)))).outputs.nodePrincipalID.value]"
-              }
-            }]
-          },
-          "workerNodeIDs": {
-            "copy": [{
-              "name": "value",
-              "count": "[length(parameters('workerNodes'))]",
-              "input": {
-                "id": "[reference(concat('worker_nodes_setup_', string(add(copyIndex('value'), 1)))).outputs.nodePrincipalID.value]"
-              }
-            }]
-          }
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "master_availability_sets_setup",
-      "type": "Microsoft.Resources/deployments",
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('availabilitySetsTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "calicoSubnetCidr": {
+            "type": "string"
         },
-        "parameters": {
-          "clusterID": {"value": "[parameters('clusterID')]"},
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "prefix": {"value": "[variables('masterPrefix')]"}
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "worker_availability_sets_setup",
-      "type": "Microsoft.Resources/deployments",
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('availabilitySetsTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "masterSubnetCidr": {
+            "type": "string"
         },
-        "parameters": {
-          "clusterID": {"value": "[parameters('clusterID')]"},
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "prefix": {"value": "[variables('workerPrefix')]"}
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "api_load_balancer_setup",
-      "type": "Microsoft.Resources/deployments",
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('publicLoadBalancerTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "workerSubnetCidr": {
+            "type": "string"
         },
-        "parameters": {
-          "clusterID": {"value": "[parameters('clusterID')]"},
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "prefix": {"value": "API"},
-          "ports": {"value":
-            [
-              {
-                "frontend": 443,
-                "backend": 443
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "ingress_load_balancer_setup",
-      "type": "Microsoft.Resources/deployments",
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('publicLoadBalancerTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "hostClusterCidr": {
+            "type": "string"
         },
-        "parameters": {
-          "clusterID": {"value": "[parameters('clusterID')]"},
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "prefix": {"value": "Ingress"},
-          "ports": {"value":
-            [
-              {
-                "frontend": 80,
-                "backend": 30010
-              },
-              {
-                "frontend": 443,
-                "backend": 30011
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "etcd_dns_setup",
-      "type": "Microsoft.Resources/deployments",
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('dnsASetupTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "kubernetesAPISecurePort": {
+            "type": "int"
         },
-        "parameters": {
-          "dnsZone": { "value": "[concat(parameters('clusterID'), '.k8s.', parameters('dnsZones').etcd.name)]" },
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "prefix": { "value": "etcd" },
-          "ipAddress": { "value": "[reference('master_nodes_setup_1').outputs.ipAddress.value]" }
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "kubernetes_api_dns_setup",
-      "type": "Microsoft.Resources/deployments",
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('dnsASetupTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "kubernetesIngressSecurePort": {
+            "type": "int"
         },
-        "parameters": {
-          "dnsZone": { "value": "[concat(parameters('clusterID'), '.k8s.', parameters('dnsZones').api.name)]" },
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "prefix": { "value": "api" },
-          "ipAddress": { "value": "[reference('api_load_balancer_setup').outputs.ipAddress.value]" }
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "kubernetes_ingress_dns_setup",
-      "type": "Microsoft.Resources/deployments",
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('dnsASetupTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "kubernetesIngressInsecurePort": {
+            "type": "int"
         },
-        "parameters": {
-          "dnsZone": { "value": "[concat(parameters('clusterID'), '.k8s.', parameters('dnsZones').ingress.name)]" },
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "prefix": { "value": "ingress" },
-          "ipAddress": { "value": "[reference('ingress_load_balancer_setup').outputs.ipAddress.value]" }
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "kubernetes_ingress_wildcard_dns_setup",
-      "type": "Microsoft.Resources/deployments",
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('dnsCNAMESetupTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "masterNodes": {
+            "type": "array"
         },
-        "parameters": {
-          "dnsZone": { "value": "[concat(parameters('clusterID'), '.k8s.', parameters('dnsZones').ingress.name)]" },
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "prefix": { "value": "*" },
-          "cname": { "value": "[concat('ingress.', parameters('clusterID'), '.k8s.', parameters('dnsZones').ingress.name)]" }
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "[concat('master_nodes_setup_', copyIndex(1))]",
-      "type": "Microsoft.Resources/deployments",
-      "copy": {
-        "name": "master_nodes_setup_copy",
-        "count":  "[length(parameters('masterNodes'))]"
-      },
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('nodeSetupTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "workerNodes": {
+            "type": "array"
         },
-        "parameters": {
-          "clusterID": {"value": "[parameters('clusterID')]"},
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "prefix": {"value": "[concat(variables('masterPrefix'), '-', copyIndex(1))]"},
-          "subnetID": {"value": "[reference('virtual_network_setup').outputs.masterSubnetID.value]"},
-          "availabilitySetID": {"value": "[reference('master_availability_sets_setup').outputs.availabilitySetID.value]"},
-          "disablePasswordAuth": {"value": "[parameters('masterDisablePasswordAuth')]"},
-          "vmSize": {"value": "[parameters('masterNodes')[copyIndex()].vmSize]"},
-          "dataDisks": {"value": [{"name": "EtcdDisk", "sizeGB": 10}, {"name": "DockerDisk", "sizeGB": 50}]},
-          "adminUsername": {"value": "[parameters('masterNodes')[copyIndex()].adminUsername]"},
-          "adminSSHKeyData": {"value": "[parameters('masterNodes')[copyIndex()].adminSSHKeyData]"},
-          "osImagePublisher": {"value": "[parameters('masterNodes')[copyIndex()].osImage.publisher]"},
-          "osImageOffer": {"value": "[parameters('masterNodes')[copyIndex()].osImage.offer]"},
-          "osImageSKU": {"value": "[parameters('masterNodes')[copyIndex()].osImage.sku]"},
-          "osImageVersion": {"value": "[parameters('masterNodes')[copyIndex()].osImage.version]"},
-          "cloudConfigData": {"value": "[parameters('masterCloudConfigData')]"},
-          "loadBalancerBackendPoolIDs": {"value": "[createArray(reference('api_load_balancer_setup').outputs.loadBalancerBackendPoolID.value)]"}
-        }
-      }
-    },
-    {
-      "apiVersion": "2016-09-01",
-      "name": "[concat('worker_nodes_setup_', copyIndex(1))]",
-      "type": "Microsoft.Resources/deployments",
-      "copy": {
-        "name": "worker_nodes_setup_copy",
-        "count":  "[length(parameters('workerNodes'))]"
-      },
-      "properties": {
-        "mode": "incremental",
-        "templateLink": {
-          "uri": "[variables('nodeSetupTemplateURI')]",
-          "contentVersion": "1.0.0.0"
+        "masterDisablePasswordAuth": {
+            "type": "bool",
+            "defaultValue": true
         },
-        "parameters": {
-          "clusterID": {"value": "[parameters('clusterID')]"},
-          "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
-          "prefix": {"value": "[concat(variables('workerPrefix'), '-', copyIndex(1))]"},
-          "subnetID": {"value": "[reference('virtual_network_setup').outputs.workerSubnetID.value]"},
-          "availabilitySetID": {"value": "[reference('worker_availability_sets_setup').outputs.availabilitySetID.value]"},
-          "disablePasswordAuth": {"value": "[parameters('workerDisablePasswordAuth')]"},
-          "vmSize": {"value": "[parameters('workerNodes')[copyIndex()].vmSize]"},
-          "dataDisks": {"value": [{"name": "DockerDisk", "sizeGB": 50}]},
-          "adminUsername": {"value": "[parameters('workerNodes')[copyIndex()].adminUsername]"},
-          "adminSSHKeyData": {"value": "[parameters('workerNodes')[copyIndex()].adminSSHKeyData]"},
-          "osImagePublisher": {"value": "[parameters('workerNodes')[copyIndex()].osImage.publisher]"},
-          "osImageOffer": {"value": "[parameters('workerNodes')[copyIndex()].osImage.offer]"},
-          "osImageSKU": {"value": "[parameters('workerNodes')[copyIndex()].osImage.sku]"},
-          "osImageVersion": {"value": "[parameters('workerNodes')[copyIndex()].osImage.version]"},
-          "cloudConfigData": {"value": "[parameters('workerCloudConfigData')]"},
-          "loadBalancerBackendPoolIDs": {"value": "[createArray(reference('ingress_load_balancer_setup').outputs.loadBalancerBackendPoolID.value)]"}
+        "workerDisablePasswordAuth": {
+            "type": "bool",
+            "defaultValue": true
+        },
+        "masterCloudConfigData": {
+            "type": "string",
+            "metadata": {
+                "description": "Base64-encoded cloud-config data."
+            }
+        },
+        "workerCloudConfigData": {
+            "type": "string",
+            "metadata": {
+                "description": "Base64-encoded cloud-config data."
+            }
+        },
+        "keyVaultName": {
+            "type": "string"
+        },
+        "keyVaultSecretsObject": {
+            "type": "secureObject"
+        },
+        "templatesBaseURI" : {
+            "type": "string",
+            "metadata": {
+                "description": "The base URI from which the templates will be fetched. Ends with a trailing '/'."
+            }
+        },
+        "availabilitySetsTemplateFile": {
+            "type": "string",
+            "defaultValue": "availability_sets_setup.json"
+        },
+        "certificatesTemplateFile": {
+            "type": "string",
+            "defaultValue": "certificates.json"
+        },
+        "dnsASetupTemplateFile": {
+            "type": "string",
+            "defaultValue": "dns_a_setup.json"
+        },
+        "dnsCNAMESetupTemplateFile": {
+            "type": "string",
+            "defaultValue": "dns_cname_setup.json"
+        },
+        "nodeSetupTemplateFile": {
+            "type": "string",
+            "defaultValue": "node_setup.json"
+        },
+        "publicLoadBalancerTemplateFile": {
+            "type": "string",
+            "defaultValue": "public_load_balancer_setup.json"
+        },
+        "routeTableTemplateFile": {
+            "type": "string",
+            "defaultValue": "route_table_setup.json"
+        },
+        "securityGroupsSetupTemplateFile": {
+            "type": "string",
+            "defaultValue": "security_groups_setup.json"
+        },
+        "virtualNetworkSetupTemplateFile": {
+            "type": "string",
+            "defaultValue": "virtual_network_setup.json"
+        },
+        "vmssTemplateFile": {
+            "type": "string",
+            "defaultValue": "vmss.json"
+        },
+        "dnsZones": {
+            "type": "object",
+            "metadata": {
+                "description": "The DNS zones for kubernetes api, etcd and ingress."
+            }
         }
-      }
-    }
-  ]
+    },
+    "variables": {
+        "availabilitySetsTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('availabilitySetsTemplateFile'))]",
+        "certificatesTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('certificatesTemplateFile'))]",
+        "dnsASetupTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('dnsASetupTemplateFile'))]",
+        "dnsCNAMESetupTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('dnsCNAMESetupTemplateFile'))]",
+        "nodeSetupTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('nodeSetupTemplateFile'))]",
+        "publicLoadBalancerTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('publicLoadBalancerTemplateFile'))]",
+        "routeTableTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('routeTableTemplateFile'))]",
+        "securityGroupsSetupTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('securityGroupsSetupTemplateFile'))]",
+        "virtualNetworkSetupTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('virtualNetworkSetupTemplateFile'))]",
+        "vmssTemplateURI": "[concat(parameters('templatesBaseURI'), parameters('vmssTemplateFile'))]",
+        "masterPrefix": "Master",
+        "workerPrefix": "Worker"
+    },
+    "resources": [
+        {
+            "apiVersion": "2016-09-01",
+            "name": "security_groups_setup",
+            "type": "Microsoft.Resources/deployments",
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('securityGroupsSetupTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "clusterID": {"value": "[parameters('clusterID')]"},
+                    "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
+                    "virtualNetworkCidr": {"value": "[parameters('virtualNetworkCidr')]"},
+                    "calicoSubnetCidr": {"value": "[parameters('calicoSubnetCidr')]"},
+                    "masterSubnetCidr": {"value": "[parameters('masterSubnetCidr')]"},
+                    "workerSubnetCidr": {"value": "[parameters('workerSubnetCidr')]"},
+                    "hostClusterCidr": {"value": "[parameters('hostClusterCidr')]"},
+                    "kubernetesAPISecurePort": {"value": "[parameters('kubernetesAPISecurePort')]"},
+                    "kubernetesIngressSecurePort": {"value": "[parameters('kubernetesIngressSecurePort')]"},
+                    "kubernetesIngressInsecurePort": {"value": "[parameters('kubernetesIngressInsecurePort')]"}
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "name": "route_table_setup",
+            "type": "Microsoft.Resources/deployments",
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('routeTableTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "clusterID": {"value": "[parameters('clusterID')]"},
+                    "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"}
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "name": "virtual_network_setup",
+            "type": "Microsoft.Resources/deployments",
+            "dependsOn": [
+                "route_table_setup"
+            ],
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('virtualNetworkSetupTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "clusterID": {"value": "[parameters('clusterID')]"},
+                    "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
+                    "virtualNetworkCidr": {"value": "[parameters('virtualNetworkCidr')]"},
+                    "masterSubnetCidr": {"value": "[parameters('masterSubnetCidr')]"},
+                    "workerSubnetCidr": {"value": "[parameters('workerSubnetCidr')]"},
+                    "masterSecurityGroupID": {"value": "[reference('security_groups_setup').outputs.masterSecurityGroupID.value]"},
+                    "workerSecurityGroupID": {"value": "[reference('security_groups_setup').outputs.workerSecurityGroupID.value]"},
+                    "routeTableID": {"value": "[reference('route_table_setup').outputs.id.value]"}
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "type": "Microsoft.Resources/deployments",
+            "name": "certificates",
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('certificatesTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "clusterID": {"value": "[parameters('clusterID')]"},
+                    "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
+                    "keyVaultName": {"value": "[parameters('keyVaultName')]"},
+                    "keyVaultSecretsObject": {"value": "[parameters('keyVaultSecretsObject')]"},
+                    "masterNodeIDs": {
+                        "copy": [{
+                            "name": "value",
+                            "count": "[length(parameters('masterNodes'))]",
+                            "input": {
+                                "id": "[reference(concat('master_nodes_setup_', string(add(copyIndex('value'), 1)))).outputs.nodePrincipalID.value]"
+                            }
+                        }]
+                    }
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "name": "master_availability_sets_setup",
+            "type": "Microsoft.Resources/deployments",
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('availabilitySetsTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "clusterID": {"value": "[parameters('clusterID')]"},
+                    "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
+                    "prefix": {"value": "[variables('masterPrefix')]"}
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "name": "api_load_balancer_setup",
+            "type": "Microsoft.Resources/deployments",
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('publicLoadBalancerTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "clusterID": {"value": "[parameters('clusterID')]"},
+                    "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
+                    "prefix": {"value": "API"},
+                    "ports": {"value":
+                        [
+                            {
+                                "frontend": 443,
+                                "backend": 443
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "name": "ingress_load_balancer_setup",
+            "type": "Microsoft.Resources/deployments",
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('publicLoadBalancerTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "clusterID": {"value": "[parameters('clusterID')]"},
+                    "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
+                    "prefix": {"value": "Ingress"},
+                    "ports": {"value":
+                        [
+                            {
+                                "frontend": 80,
+                                "backend": 30010
+                            },
+                            {
+                                "frontend": 443,
+                                "backend": 30011
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "name": "etcd_dns_setup",
+            "type": "Microsoft.Resources/deployments",
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('dnsASetupTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "dnsZone": { "value": "[concat(parameters('clusterID'), '.k8s.', parameters('dnsZones').etcd.name)]" },
+                    "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
+                    "prefix": { "value": "etcd" },
+                    "ipAddress": { "value": "[reference('master_nodes_setup_1').outputs.ipAddress.value]" }
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "name": "kubernetes_api_dns_setup",
+            "type": "Microsoft.Resources/deployments",
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('dnsASetupTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "dnsZone": { "value": "[concat(parameters('clusterID'), '.k8s.', parameters('dnsZones').api.name)]" },
+                    "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
+                    "prefix": { "value": "api" },
+                    "ipAddress": { "value": "[reference('api_load_balancer_setup').outputs.ipAddress.value]" }
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "name": "kubernetes_ingress_dns_setup",
+            "type": "Microsoft.Resources/deployments",
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('dnsASetupTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "dnsZone": { "value": "[concat(parameters('clusterID'), '.k8s.', parameters('dnsZones').ingress.name)]" },
+                    "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
+                    "prefix": { "value": "ingress" },
+                    "ipAddress": { "value": "[reference('ingress_load_balancer_setup').outputs.ipAddress.value]" }
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "name": "kubernetes_ingress_wildcard_dns_setup",
+            "type": "Microsoft.Resources/deployments",
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('dnsCNAMESetupTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "dnsZone": { "value": "[concat(parameters('clusterID'), '.k8s.', parameters('dnsZones').ingress.name)]" },
+                    "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
+                    "prefix": { "value": "*" },
+                    "cname": { "value": "[concat('ingress.', parameters('clusterID'), '.k8s.', parameters('dnsZones').ingress.name)]" }
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "name": "[concat('master_nodes_setup_', copyIndex(1))]",
+            "type": "Microsoft.Resources/deployments",
+            "copy": {
+                "name": "master_nodes_setup_copy",
+                "count":  "[length(parameters('masterNodes'))]"
+            },
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('nodeSetupTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "clusterID": {"value": "[parameters('clusterID')]"},
+                    "GiantSwarmTags": {"value": "[parameters('GiantSwarmTags')]"},
+                    "prefix": {"value": "[concat(variables('masterPrefix'), '-', copyIndex(1))]"},
+                    "subnetID": {"value": "[reference('virtual_network_setup').outputs.masterSubnetID.value]"},
+                    "availabilitySetID": {"value": "[reference('master_availability_sets_setup').outputs.availabilitySetID.value]"},
+                    "disablePasswordAuth": {"value": "[parameters('masterDisablePasswordAuth')]"},
+                    "vmSize": {"value": "[parameters('masterNodes')[copyIndex()].vmSize]"},
+                    "dataDisks": {"value": [{"name": "EtcdDisk", "sizeGB": 10}, {"name": "DockerDisk", "sizeGB": 50}]},
+                    "adminUsername": {"value": "[parameters('masterNodes')[copyIndex()].adminUsername]"},
+                    "adminSSHKeyData": {"value": "[parameters('masterNodes')[copyIndex()].adminSSHKeyData]"},
+                    "osImagePublisher": {"value": "[parameters('masterNodes')[copyIndex()].osImage.publisher]"},
+                    "osImageOffer": {"value": "[parameters('masterNodes')[copyIndex()].osImage.offer]"},
+                    "osImageSKU": {"value": "[parameters('masterNodes')[copyIndex()].osImage.sku]"},
+                    "osImageVersion": {"value": "[parameters('masterNodes')[copyIndex()].osImage.version]"},
+                    "cloudConfigData": {"value": "[parameters('masterCloudConfigData')]"},
+                    "loadBalancerBackendPoolIDs": {"value": "[createArray(reference('api_load_balancer_setup').outputs.loadBalancerBackendPoolID.value)]"}
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "type": "Microsoft.Resources/deployments",
+            "name": "worker-vmss-deploy",
+            "properties": {
+                "mode": "incremental",
+                "templateLink": {
+                    "uri": "[variables('vmssTemplateURI')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "certFile":             {"value": "/etcd/kubernetes/ssl/pawel/cert.crt"},
+                    "certData":             {"value": "[parameteres('certData')]"},
+                    "location":             {"value": "[resourceGroup().location]"},
+                    "GiantSwarmTags":       {"value": "[parameters('GiantSwarmTags')]"},
+                    "vmssName":             {"value": "worker-vmss"},
+                    "vmssVmSize":           {"value": "[parameters('workerNodes')[0].vmSize]"},
+                    "vmssVmCount":          {"value": "[length(parameters('workerNodes'))]"},
+                    "vmssVmDataDisks":      {"value": [{"name": "DockerDisk", "sizeGB": 50}]},
+                    "vmssSshUser":          {"value": "[parameters('workerNodes')[0].adminUsername]"},
+                    "vmssSshPublicKey":     {"value": "[parameters('workerNodes')[0].adminSSHKeyData]"},
+                    "vmssOsImagePublisher": {"value": "[parameters('workerNodes')[0].osImage.publisher]"},
+                    "vmssOsImageOffer":     {"value": "[parameters('workerNodes')[0].osImage.offer]"},
+                    "vmssOsImageSKU":       {"value": "[parameters('workerNodes')[0].osImage.sku]"},
+                    "vmssOsImageVersion":   {"value": "[parameters('workerNodes')[0].osImage.version]"},
+                    "vmssLbBackendPoolId":  {"value": "[reference('ingress_load_balancer_setup').outputs.backendPoolId.value]"},
+                    "vmssVnetSubnetId":     {"value": "[reference('virtual_network_setup').outputs.masterSubnetID.value]"}
+                }
+            }
+        }
+    ]
 }
